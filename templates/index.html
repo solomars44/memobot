@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MemoryBot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chat-container {
+            height: calc(100vh - 180px);
+        }
+        .messages {
+            height: calc(100% - 60px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm p-4">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">MemoryBot</h1>
+            <div class="flex items-center gap-4">
+                <div id="status" class="flex items-center gap-2">
+                    <span class="text-red-500">Ollama Inactive</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="model-select" class="text-sm font-medium text-gray-700">Model:</label>
+                    <select id="model-select" class="block rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-4">
+        <div class="chat-container flex flex-col bg-white rounded-lg shadow-sm">
+            <div id="messages" class="messages flex-1 overflow-y-auto p-4 space-y-4"></div>
+            <div class="border-t p-4">
+                <form id="chat-form" class="flex gap-2">
+                    <input
+                        type="text"
+                        id="message-input"
+                        placeholder="Type your message..."
+                        class="flex-1 rounded-lg border border-gray-300 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                    <button
+                        type="submit"
+                        class="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                        Send
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let selectedModel = 'llama2';
+
+        async function checkOllamaStatus() {
+            try {
+                const response = await fetch('http://localhost:11434/api/tags');
+                const status = document.getElementById('status');
+                if (response.ok) {
+                    status.innerHTML = '<span class="text-green-500">Ollama Active</span>';
+                    return true;
+                }
+                status.innerHTML = '<span class="text-red-500">Ollama Inactive</span>';
+                return false;
+            } catch {
+                status.innerHTML = '<span class="text-red-500">Ollama Inactive</span>';
+                return false;
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const response = await fetch('/models');
+                const data = await response.json();
+                const select = document.getElementById('model-select');
+                select.innerHTML = '';
+                
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    if (model === selectedModel) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading models:', error);
+            }
+        }
+
+        function appendMessage(content, isUser) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `max-w-[80%] rounded-lg p-4 ${
+                isUser ? 'bg-blue-500 text-white' : 'bg-gray-100'
+            }`;
+            messageDiv.textContent = content;
+            
+            div.appendChild(messageDiv);
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+            appendMessage(message, true);
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message,
+                        model: document.getElementById('model-select').value
+                    })
+                });
+                
+                const data = await response.json();
+                appendMessage(data.response, false);
+            } catch (error) {
+                console.error('Error:', error);
+                appendMessage('Sorry, I encountered an error processing your request.', false);
+            }
+        });
+
+        document.getElementById('model-select').addEventListener('change', (e) => {
+            selectedModel = e.target.value;
+        });
+
+        // Initial setup
+        checkOllamaStatus();
+        loadModels();
+
+        // Periodic checks
+        setInterval(checkOllamaStatus, 5000);
+        setInterval(loadModels, 5000);
+    </script>
+</body>
+</html>
